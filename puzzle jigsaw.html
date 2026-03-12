@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jigsaw Puzzle Android - Dengan Timer</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; background: #2c3e50; color: white;
+            margin: 0; padding: 10px; overflow-x: hidden;
+        }
+        .controls { 
+            background: #34495e; padding: 15px; border-radius: 15px; 
+            margin-bottom: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .stats {
+            font-size: 18px; font-weight: bold; margin: 10px 0;
+            color: #f1c40f; background: rgba(0,0,0,0.2);
+            padding: 5px; border-radius: 5px;
+        }
+        #canvas-container { 
+            position: relative; display: inline-block; 
+            background: #1a252f; border: 2px solid #ecf0f1;
+            touch-action: none;
+        }
+        canvas { display: block; max-width: 100vw; max-height: 65vh; }
+        button { 
+            padding: 12px 25px; font-size: 16px; font-weight: bold;
+            background: #27ae60; color: white; border: none; border-radius: 8px;
+            margin-top: 10px; cursor: pointer;
+        }
+        input[type="file"] { margin: 10px 0; font-size: 14px; }
+        select { padding: 8px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2>Puzzle Jigsaw</h2>
+        <input type="file" id="imageLoader" accept="image/*"><br>
+        <label>Potongan: </label>
+        <select id="difficulty">
+            <option value="3">3x3 (Mudah)</option>
+            <option value="4" selected>4x4 (Normal)</option>
+            <option value="5">5x5 (Sulit)</option>
+        </select>
+        <br>
+        <button id="startBtn">Acak & Main</button>
+        <div class="stats">Waktu: <span id="timerDisplay">00:00</span></div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="puzzleCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('puzzleCanvas');
+        const ctx = canvas.getContext('2d');
+        const imgLoader = document.getElementById('imageLoader');
+        const startBtn = document.getElementById('startBtn');
+        const difficultySelect = document.getElementById('difficulty');
+        const timerDisplay = document.getElementById('timerDisplay');
+
+        let img = new Image();
+        let pieces = [];
+        let pieceWidth, pieceHeight, rows, cols;
+        let selectedPiece = null;
+        let offset = { x: 0, y: 0 };
+        
+        // Variabel Timer
+        let startTime;
+        let timerInterval;
+        let gameActive = false;
+
+        imgLoader.onchange = (e) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                img.onload = () => {
+                    resetTimer();
+                    setupCanvas();
+                    initPuzzle();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        };
+
+        function setupCanvas() {
+            const maxWidth = window.innerWidth - 30;
+            const maxHeight = window.innerHeight * 0.65;
+            let targetWidth = img.width;
+            let targetHeight = img.height;
+            const scale = Math.min(maxWidth / targetWidth, maxHeight / targetHeight, 1);
+            canvas.width = targetWidth * scale;
+            canvas.height = targetHeight * scale;
+        }
+
+        function initPuzzle() {
+            rows = cols = parseInt(difficultySelect.value);
+            pieceWidth = canvas.width / cols;
+            pieceHeight = canvas.height / rows;
+            pieces = [];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    pieces.push({
+                        sx: c * (img.width / cols),
+                        sy: r * (img.height / rows),
+                        x: c * pieceWidth,
+                        y: r * pieceHeight,
+                        correctX: c * pieceWidth,
+                        correctY: r * pieceHeight,
+                        isSolved: true
+                    });
+                }
+            }
+            draw();
+        }
+
+        function startTimer() {
+            resetTimer();
+            startTime = Date.now();
+            gameActive = true;
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function updateTimer() {
+            const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
+            const seconds = (elapsedTime % 60).toString().padStart(2, '0');
+            timerDisplay.innerText = `${minutes}:${seconds}`;
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerDisplay.innerText = "00:00";
+            gameActive = false;
+        }
+
+        startBtn.onclick = () => {
+            if (!img.src) return alert("Pilih gambar dulu!");
+            pieces.forEach(p => {
+                p.x = Math.random() * (canvas.width - pieceWidth);
+                p.y = Math.random() * (canvas.height - pieceHeight);
+                p.isSolved = false;
+            });
+            draw();
+            startTimer();
+        };
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            pieces.forEach(p => {
+                ctx.drawImage(img, p.sx, p.sy, img.width/cols, img.height/rows, p.x, p.y, pieceWidth, pieceHeight);
+                ctx.strokeStyle = "rgba(255,255,255,0.4)";
+                ctx.strokeRect(p.x, p.y, pieceWidth, pieceHeight);
+            });
+        }
+
+        function getCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function handleStart(e) {
+            if (!gameActive) return;
+            e.preventDefault();
+            const pos = getCoords(e);
+            for (let i = pieces.length - 1; i >= 0; i--) {
+                const p = pieces[i];
+                if (!p.isSolved && pos.x > p.x && pos.x < p.x + pieceWidth && pos.y > p.y && pos.y < p.y + pieceHeight) {
+                    selectedPiece = p;
+                    offset.x = pos.x - p.x;
+                    offset.y = pos.y - p.y;
+                    pieces.splice(i, 1);
+                    pieces.push(selectedPiece);
+                    break;
+                }
+            }
+        }
+
+        function handleMove(e) {
+            if (!selectedPiece) return;
+            e.preventDefault();
+            const pos = getCoords(e);
+            selectedPiece.x = pos.x - offset.x;
+            selectedPiece.y = pos.y - offset.y;
+            draw();
+        }
+
+        function handleEnd() {
+            if (selectedPiece) {
+                if (Math.abs(selectedPiece.x - selectedPiece.correctX) < 30 && 
+                    Math.abs(selectedPiece.y - selectedPiece.correctY) < 30) {
+                    selectedPiece.x = selectedPiece.correctX;
+                    selectedPiece.y = selectedPiece.correctY;
+                    selectedPiece.isSolved = true;
+                }
+                selectedPiece = null;
+                draw();
+                checkWin();
+            }
+        }
+
+        function checkWin() {
+            if (pieces.every(p => p.isSolved)) {
+                clearInterval(timerInterval);
+                gameActive = false;
+                const finalTime = timerDisplay.innerText;
+                setTimeout(() => alert("Hebat! Puzzle selesai dalam waktu " + finalTime), 300);
+            }
+        }
+
+        canvas.addEventListener('touchstart', handleStart, {passive: false});
+        window.addEventListener('touchmove', handleMove, {passive: false});
+        window.addEventListener('touchend', handleEnd);
+        canvas.addEventListener('mousedown', handleStart);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+
+    </script>
+</body>
+</html>
